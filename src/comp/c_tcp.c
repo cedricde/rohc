@@ -67,8 +67,12 @@
  * Private function prototypes.
  */
 
-static bool c_tcp_create(struct rohc_comp_ctxt *const context,
-                         const struct net_pkt *const packet)
+static bool c_tcp_create_from_ctxt(struct rohc_comp_ctxt *const ctxt,
+                                   const struct rohc_comp_ctxt *const base_ctxt)
+	__attribute__((warn_unused_result, nonnull(1, 2)));
+
+static bool c_tcp_create_from_pkt(struct rohc_comp_ctxt *const context,
+                                  const struct net_pkt *const packet)
 	__attribute__((warn_unused_result, nonnull(1, 2)));
 
 static void c_tcp_destroy(struct rohc_comp_ctxt *const context)
@@ -79,8 +83,9 @@ static bool c_tcp_check_profile(const struct rohc_comp *const comp,
 	__attribute__((warn_unused_result, nonnull(1, 2)));
 
 static bool c_tcp_check_context(const struct rohc_comp_ctxt *const context,
-                                const struct net_pkt *const packet)
-	__attribute__((warn_unused_result, nonnull(1, 2)));
+                                const struct net_pkt *const packet,
+                                size_t *const cr_score)
+	__attribute__((warn_unused_result, nonnull(1, 2, 3)));
 
 static int c_tcp_encode(struct rohc_comp_ctxt *const context,
                         const struct net_pkt *const uncomp_pkt,
@@ -407,6 +412,215 @@ static void c_tcp_feedback_ack(struct rohc_comp_ctxt *const context,
 	__attribute__((nonnull(1)));
 
 
+
+/** TODO
+ * @brief Define a W-LSB window entry
+ */
+struct ___c_window
+{
+	uint32_t sn;     /**< The Sequence Number (SN) associated with the entry
+	                      (used to acknowledge the entry) */
+	uint32_t value;  /**< The value stored in the window entry */
+};
+
+
+/** TODO
+ * @brief Defines a W-LSB encoding object
+ */
+struct ___c_wlsb
+{
+	/// The width of the window
+	size_t window_width; /* TODO: R-mode needs a non-fixed window width */
+
+	/// The size of the window (power of 2) minus 1
+	size_t window_mask;
+
+	/// A pointer on the oldest entry in the window (change on acknowledgement)
+	size_t oldest;
+	/// A pointer on the current entry in the window  (change on add and ack)
+	size_t next;
+
+	/// Count of entries in the window
+	size_t count;
+
+	/// The maximal number of bits for representing the value
+	size_t bits;
+	/// Shift parameter (see 4.5.2 in the RFC 3095)
+	rohc_lsb_shift_t p;
+
+	/** The window in which previous values of the encoded value are stored */
+	struct ___c_window window[1];
+};
+
+
+/**
+ * @brief Create a new TCP context and initialize it thanks to the given context
+ *
+ * This function is one of the functions that must exist in one profile for the
+ * framework to work.
+ *
+ * @param ctxt       The compression context to create
+ * @param base_ctxt  The base context given to initialize the new context
+ * @return           true if successful, false otherwise
+ */
+static bool c_tcp_create_from_ctxt(struct rohc_comp_ctxt *const ctxt,
+                                   const struct rohc_comp_ctxt *const base_ctxt)
+{
+	const struct rohc_comp *const comp = ctxt->compressor;
+	const struct sc_tcp_context *const base_tcp_ctxt = base_ctxt->specific;
+	const size_t wlsb_size = /* TODO */
+		sizeof(struct ___c_wlsb) + (comp->wlsb_window_width - 1) * sizeof(struct ___c_window);
+	struct sc_tcp_context *tcp_ctxt;
+
+	/* create the TCP part of the profile context */
+	tcp_ctxt = malloc(sizeof(struct sc_tcp_context));
+	if(tcp_ctxt == NULL)
+	{
+		rohc_error(ctxt->compressor, ROHC_TRACE_COMP, ctxt->profile->id,
+		           "no memory for the TCP part of the profile context");
+		goto error;
+	}
+	ctxt->specific = tcp_ctxt;
+	memcpy(ctxt->specific, base_ctxt->specific, sizeof(struct sc_tcp_context));
+
+	/* MSN */
+	tcp_ctxt->msn_wlsb =
+		c_create_wlsb(16, comp->wlsb_window_width, ROHC_LSB_SHIFT_TCP_SN);
+	if(tcp_ctxt->msn_wlsb == NULL)
+	{
+		rohc_error(ctxt->compressor, ROHC_TRACE_COMP, ctxt->profile->id,
+		           "failed to create W-LSB context for MSN");
+		goto free_context;
+	}
+	memcpy(tcp_ctxt->msn_wlsb, base_tcp_ctxt->msn_wlsb, wlsb_size);
+
+	/* IP-ID offset */
+	tcp_ctxt->ip_id_wlsb =
+		c_create_wlsb(16, comp->wlsb_window_width, ROHC_LSB_SHIFT_VAR);
+	if(tcp_ctxt->ip_id_wlsb == NULL)
+	{
+		rohc_error(ctxt->compressor, ROHC_TRACE_COMP, ctxt->profile->id,
+		           "failed to create W-LSB context for IP-ID offset");
+		goto free_wlsb_msn;
+	}
+	memcpy(tcp_ctxt->ip_id_wlsb, base_tcp_ctxt->ip_id_wlsb, wlsb_size);
+
+	/* innermost IPv4 TTL or IPv6 Hop Limit */
+	tcp_ctxt->ttl_hopl_wlsb =
+		c_create_wlsb(8, comp->wlsb_window_width, ROHC_LSB_SHIFT_TCP_TTL);
+	if(tcp_ctxt->ttl_hopl_wlsb == NULL)
+	{
+		rohc_error(ctxt->compressor, ROHC_TRACE_COMP, ctxt->profile->id,
+		           "failed to create W-LSB context for innermost IPv4 TTL or "
+		           "IPv6 Hop Limit");
+		goto free_wlsb_ip_id;
+	}
+	memcpy(tcp_ctxt->ttl_hopl_wlsb, base_tcp_ctxt->ttl_hopl_wlsb, wlsb_size);
+
+	/* TCP window */
+	tcp_ctxt->window_wlsb =
+		c_create_wlsb(16, comp->wlsb_window_width, ROHC_LSB_SHIFT_TCP_WINDOW);
+	if(tcp_ctxt->window_wlsb == NULL)
+	{
+		rohc_error(ctxt->compressor, ROHC_TRACE_COMP, ctxt->profile->id,
+		           "failed to create W-LSB context for TCP window");
+		goto free_wlsb_ttl_hopl;
+	}
+	memcpy(tcp_ctxt->window_wlsb, base_tcp_ctxt->window_wlsb, wlsb_size);
+
+	/* TCP sequence number */
+	tcp_ctxt->seq_wlsb =
+		c_create_wlsb(32, comp->wlsb_window_width, ROHC_LSB_SHIFT_VAR);
+	if(tcp_ctxt->seq_wlsb == NULL)
+	{
+		rohc_error(ctxt->compressor, ROHC_TRACE_COMP, ctxt->profile->id,
+		           "failed to create W-LSB context for TCP sequence number");
+		goto free_wlsb_window;
+	}
+	memcpy(tcp_ctxt->seq_wlsb, base_tcp_ctxt->seq_wlsb, wlsb_size);
+	tcp_ctxt->seq_scaled_wlsb = c_create_wlsb(32, 4, 7);
+	if(tcp_ctxt->seq_scaled_wlsb == NULL)
+	{
+		rohc_error(ctxt->compressor, ROHC_TRACE_COMP, ctxt->profile->id,
+		           "failed to create W-LSB context for TCP scaled sequence "
+		           "number");
+		goto free_wlsb_seq;
+	}
+	memcpy(tcp_ctxt->seq_scaled_wlsb, base_tcp_ctxt->seq_scaled_wlsb, wlsb_size);
+
+	/* TCP acknowledgment (ACK) number */
+	tcp_ctxt->ack_wlsb =
+		c_create_wlsb(32, comp->wlsb_window_width, ROHC_LSB_SHIFT_VAR);
+	if(tcp_ctxt->ack_wlsb == NULL)
+	{
+		rohc_error(ctxt->compressor, ROHC_TRACE_COMP, ctxt->profile->id,
+		           "failed to create W-LSB context for TCP ACK number");
+		goto free_wlsb_seq_scaled;
+	}
+	memcpy(tcp_ctxt->ack_wlsb, base_tcp_ctxt->ack_wlsb, wlsb_size);
+	tcp_ctxt->ack_scaled_wlsb = c_create_wlsb(32, 4, 3);
+	if(tcp_ctxt->ack_scaled_wlsb == NULL)
+	{
+		rohc_error(ctxt->compressor, ROHC_TRACE_COMP, ctxt->profile->id,
+		           "failed to create W-LSB context for TCP scaled ACK number");
+		goto free_wlsb_ack;
+	}
+	memcpy(tcp_ctxt->ack_scaled_wlsb, base_tcp_ctxt->ack_scaled_wlsb, wlsb_size);
+
+	/* init the Master Sequence Number to a random value */
+	tcp_ctxt->msn = comp->random_cb(comp, comp->random_cb_ctxt) & 0xffff;
+	rohc_comp_debug(ctxt, "MSN = 0x%04x / %u", tcp_ctxt->msn, tcp_ctxt->msn);
+
+	/* TCP option Timestamp (request) */
+	tcp_ctxt->tcp_opts.ts_req_wlsb =
+		c_create_wlsb(32, comp->wlsb_window_width, ROHC_LSB_SHIFT_VAR);
+	if(tcp_ctxt->tcp_opts.ts_req_wlsb == NULL)
+	{
+		rohc_error(ctxt->compressor, ROHC_TRACE_COMP, ctxt->profile->id,
+		           "failed to create W-LSB context for TCP option Timestamp "
+		           "request");
+		goto free_wlsb_ack_scaled;
+	}
+	memcpy(tcp_ctxt->tcp_opts.ts_req_wlsb, base_tcp_ctxt->tcp_opts.ts_req_wlsb, wlsb_size);
+	/* TCP option Timestamp (reply) */
+	tcp_ctxt->tcp_opts.ts_reply_wlsb =
+		c_create_wlsb(32, comp->wlsb_window_width, ROHC_LSB_SHIFT_VAR);
+	if(tcp_ctxt->tcp_opts.ts_reply_wlsb == NULL)
+	{
+		rohc_error(ctxt->compressor, ROHC_TRACE_COMP, ctxt->profile->id,
+		           "failed to create W-LSB context for TCP option Timestamp "
+		           "reply");
+		goto free_wlsb_opt_ts_req;
+	}
+	memcpy(tcp_ctxt->tcp_opts.ts_reply_wlsb, base_tcp_ctxt->tcp_opts.ts_reply_wlsb, wlsb_size);
+
+	return true;
+
+free_wlsb_opt_ts_req:
+	c_destroy_wlsb(tcp_ctxt->tcp_opts.ts_req_wlsb);
+free_wlsb_ack_scaled:
+	c_destroy_wlsb(tcp_ctxt->ack_scaled_wlsb);
+free_wlsb_ack:
+	c_destroy_wlsb(tcp_ctxt->ack_wlsb);
+free_wlsb_seq_scaled:
+	c_destroy_wlsb(tcp_ctxt->seq_scaled_wlsb);
+free_wlsb_seq:
+	c_destroy_wlsb(tcp_ctxt->seq_wlsb);
+free_wlsb_window:
+	c_destroy_wlsb(tcp_ctxt->window_wlsb);
+free_wlsb_ttl_hopl:
+	c_destroy_wlsb(tcp_ctxt->ttl_hopl_wlsb);
+free_wlsb_ip_id:
+	c_destroy_wlsb(tcp_ctxt->ip_id_wlsb);
+free_wlsb_msn:
+	c_destroy_wlsb(tcp_ctxt->msn_wlsb);
+free_context:
+	free(tcp_ctxt);
+error:
+	return false;
+}
+
+
 /**
  * @brief Create a new TCP context and initialize it thanks to the given IP/TCP
  *        packet.
@@ -421,8 +635,8 @@ static void c_tcp_feedback_ack(struct rohc_comp_ctxt *const context,
  * @todo TODO: the code that parses IP headers in IP/UDP/RTP profiles could
  *             probably be re-used (and maybe enhanced if needed)
  */
-static bool c_tcp_create(struct rohc_comp_ctxt *const context,
-                         const struct net_pkt *const packet)
+static bool c_tcp_create_from_pkt(struct rohc_comp_ctxt *const context,
+                                  const struct net_pkt *const packet)
 {
 	const struct rohc_comp *const comp = context->compressor;
 	struct sc_tcp_context *tcp_context;
@@ -1109,16 +1323,18 @@ bad_exts:
  * This function is one of the functions that must exist in one profile for the
  * framework to work.
  *
- * @param context  The compression context
- * @param packet   The IP/TCP packet to check
- * @return         true if the IP/TCP packet belongs to the context
- *                 false if it does not belong to the context
+ * @param context        The compression context
+ * @param packet         The IP/TCP packet to check
+ * @param[out] cr_score  The score of the context for Context Replication (CR)
+ * @return               true if the IP/TCP packet belongs to the context
+ *                       false if it does not belong to the context
  *
  * @todo TODO: the code that parses IP headers in IP/UDP/RTP profiles could
  *             probably be re-used (and maybe enhanced if needed)
  */
 static bool c_tcp_check_context(const struct rohc_comp_ctxt *const context,
-                                const struct net_pkt *const packet)
+                                const struct net_pkt *const packet,
+                                size_t *const cr_score)
 {
 	struct sc_tcp_context *const tcp_context = context->specific;
 	const uint8_t *remain_data = packet->outer_ip.data;
@@ -1126,7 +1342,13 @@ static bool c_tcp_check_context(const struct rohc_comp_ctxt *const context,
 	size_t ip_hdr_pos;
 	uint8_t next_proto = ROHC_IPPROTO_IPIP;
 	const struct tcphdr *tcp;
-	bool is_tcp_same;
+
+	/* Context Replication is possible only if the chain of IP headers is
+	 * unchanged on some aspects:
+	 *  - same number and order of IP headers,
+	 *  - IP versions,
+	 *  - IP addresses */
+	(*cr_score) = 0;
 
 	/* parse the IP headers (lengths already checked while checking profile) */
 	for(ip_hdr_pos = 0;
@@ -1152,14 +1374,21 @@ static bool c_tcp_check_context(const struct rohc_comp_ctxt *const context,
 
 			assert(remain_len >= sizeof(struct ipv4_hdr));
 
-			/* check source and destination addresses */
-			if(ipv4->saddr != ip_context->ctxt.v4.src_addr ||
-			   ipv4->daddr != ip_context->ctxt.v4.dst_addr)
+			/* check source address */
+			if(ipv4->saddr != ip_context->ctxt.v4.src_addr)
 			{
-				rohc_comp_debug(context, "  not same IPv4 addresses");
+				rohc_comp_debug(context, "  not same IPv4 source addresses");
 				goto bad_context;
 			}
-			rohc_comp_debug(context, "  same IPv4 addresses");
+			rohc_comp_debug(context, "  same IPv4 source addresses");
+
+			/* check destination address */
+			if(ipv4->daddr != ip_context->ctxt.v4.dst_addr)
+			{
+				rohc_comp_debug(context, "  not same IPv4 destination addresses");
+				goto bad_context;
+			}
+			rohc_comp_debug(context, "  same IPv4 destination addresses");
 
 			/* check transport protocol */
 			next_proto = ipv4->protocol;
@@ -1180,16 +1409,23 @@ static bool c_tcp_check_context(const struct rohc_comp_ctxt *const context,
 
 			assert(remain_len >= sizeof(struct ipv6_hdr));
 
-			/* check source and destination addresses */
+			/* check source address */
 			if(memcmp(&ipv6->saddr, ip_context->ctxt.v6.src_addr,
-			          sizeof(struct ipv6_addr)) != 0 ||
-			   memcmp(&ipv6->daddr, ip_context->ctxt.v6.dest_addr,
 			          sizeof(struct ipv6_addr)) != 0)
 			{
-				rohc_comp_debug(context, "  not same IPv6 addresses");
+				rohc_comp_debug(context, "  not same IPv6 source addresses");
 				goto bad_context;
 			}
-			rohc_comp_debug(context, "  same IPv6 addresses");
+			rohc_comp_debug(context, "  same IPv6 source addresses");
+
+			/* check destination address */
+			if(memcmp(&ipv6->daddr, ip_context->ctxt.v6.dest_addr,
+			          sizeof(struct ipv6_addr)) != 0)
+			{
+				rohc_comp_debug(context, "  not same IPv6 destination addresses");
+				goto bad_context;
+			}
+			rohc_comp_debug(context, "  same IPv6 destination addresses");
 
 			/* check Flow Label */
 			if(ipv6_get_flow_label(ipv6) != ip_context->ctxt.v6.flow_label)
@@ -1245,14 +1481,31 @@ static bool c_tcp_check_context(const struct rohc_comp_ctxt *const context,
 		goto bad_context;
 	}
 
+	/* the packet matches the context enough to use Context Replication */
+	(*cr_score)++;
+
 	assert(remain_len >= sizeof(struct tcphdr));
 	tcp = (struct tcphdr *) remain_data;
-	is_tcp_same = tcp_context->old_tcphdr.src_port == tcp->src_port &&
-	              tcp_context->old_tcphdr.dst_port == tcp->dst_port;
-	rohc_comp_debug(context, "  TCP %ssame Source and Destination ports",
-	                is_tcp_same ? "" : "not ");
 
-	return is_tcp_same;
+	/* check TCP source port */
+	if(tcp_context->old_tcphdr.src_port != tcp->src_port)
+	{
+		rohc_comp_debug(context, "  not same TCP source ports");
+		goto bad_context;
+	}
+	rohc_comp_debug(context, "  same TCP source ports");
+	(*cr_score)++;
+
+	/* check TCP destination port */
+	if(tcp_context->old_tcphdr.dst_port != tcp->dst_port)
+	{
+		rohc_comp_debug(context, "  not same TCP destination ports");
+		goto bad_context;
+	}
+	rohc_comp_debug(context, "  same TCP destination ports");
+	(*cr_score)++;
+
+	return true;
 
 bad_context:
 	return false;
@@ -5469,7 +5722,8 @@ const struct rohc_comp_profile c_tcp_profile =
 {
 	.id             = ROHC_PROFILE_TCP, /* profile ID (see 8 in RFC 3095) */
 	.protocol       = ROHC_IPPROTO_TCP, /* IP protocol */
-	.create         = c_tcp_create,     /* profile handlers */
+	.create         = c_tcp_create_from_pkt,     /* profile handlers */
+	.clone          = c_tcp_create_from_ctxt,
 	.destroy        = c_tcp_destroy,
 	.check_profile  = c_tcp_check_profile,
 	.check_context  = c_tcp_check_context,
