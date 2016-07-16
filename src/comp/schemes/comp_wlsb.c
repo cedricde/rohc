@@ -255,7 +255,9 @@ size_t wlsb_get_kp_8bits(const struct c_wlsb *const wlsb,
 			}
 		}
 	}
+#if 0
 	assert(bits_nr <= 8);
+#endif
 
 	return bits_nr;
 }
@@ -362,7 +364,9 @@ size_t wlsb_get_minkp_16bits(const struct c_wlsb *const wlsb,
 			}
 		}
 	}
+#if 0
 	assert(bits_nr <= 16);
+#endif
 
 	return bits_nr;
 }
@@ -443,8 +447,10 @@ size_t wlsb_get_minkp_32bits(const struct c_wlsb *const wlsb,
 {
 	size_t bits_nr;
 
+#if 0
 	assert(wlsb->window != NULL);
 	assert(value <= 0xffffffff);
+#endif
 
 	/* use all bits if the window contains no value */
 	if(wlsb->count == 0)
@@ -472,7 +478,9 @@ size_t wlsb_get_minkp_32bits(const struct c_wlsb *const wlsb,
 			}
 		}
 	}
+#if 0
 	assert(bits_nr <= 32);
+#endif
 
 	return bits_nr;
 }
@@ -585,7 +593,9 @@ static size_t rohc_g_8bits(const uint8_t v_ref,
 	struct rohc_interval8 interval;
 	size_t k;
 
+#if 0
 	assert(bits_nr <= 8);
+#endif
 
 	for(k = 0; k < bits_nr; k++)
 	{
@@ -637,8 +647,10 @@ static size_t rohc_g_16bits(const uint16_t v_ref,
 	struct rohc_interval16 interval;
 	size_t k;
 
+#if 0
 	assert(bits_nr <= 16);
 	assert(min_k <= bits_nr);
+#endif
 
 	for(k = min_k; k < bits_nr; k++)
 	{
@@ -690,8 +702,10 @@ static size_t rohc_g_32bits(const uint32_t v_ref,
 	struct rohc_interval32 interval;
 	size_t k;
 
+#if 0
 	assert(bits_nr <= 32);
 	assert(min_k < bits_nr);
+#endif
 
 	for(k = min_k; k < bits_nr; k++)
 	{
