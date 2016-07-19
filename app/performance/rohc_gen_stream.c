@@ -463,7 +463,7 @@ static bool build_stream(const char *const filename,
 		ipv4->ihl = 5;
 		ipv4->tos = 0;
 		ipv4->tot_len = htons(packet_len);
-		ipv4->id = htons(42 + counter);
+		ipv4->id = htons(42 + counter / streams_nr);
 		ipv4->frag_off = 0;
 		ipv4->ttl = 64;
 		ipv4->protocol = IPPROTO_UDP;
@@ -491,8 +491,8 @@ static bool build_stream(const char *const filename,
 		rtp->cc = 0;
 		rtp->m = 0;
 		rtp->pt = 0x72; /* speex */
-		rtp->sn = htons(counter);
-		rtp->timestamp = htonl(500000 + counter * 160);
+		rtp->sn = htons(counter / streams_nr);
+		rtp->timestamp = htonl(500000 + (counter / streams_nr) * 160);
 		rtp->ssrc = htonl(0x42424242 + (counter % streams_nr));
 		rohc_buf_pull(&packet, sizeof(struct rtphdr));
 
