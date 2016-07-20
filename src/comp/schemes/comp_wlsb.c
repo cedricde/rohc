@@ -157,9 +157,11 @@ void c_add_wlsb(struct c_wlsb *const wlsb,
                 const uint32_t sn,
                 const uint32_t value)
 {
+#if 0
 	assert(wlsb != NULL);
 	assert(wlsb->window != NULL);
 	assert(wlsb->next < wlsb->window_width);
+#endif
 
 	/* if window is full, an entry is overwritten */
 	if(wlsb->count == wlsb->window_width)
@@ -607,7 +609,9 @@ size_t wlsb_ack(struct c_wlsb *const wlsb,
 	{
 		sn_mask = 0xffffffffUL;
 	}
+#if 0
 	assert((sn_bits & sn_mask) == sn_bits);
+#endif
 
 	/* search for the window entry that matches the given SN LSB
 	 * starting from the one */
