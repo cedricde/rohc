@@ -61,6 +61,10 @@
  *  being able to switch to the FO state */
 #define MAX_IR_COUNT  3U
 
+/** The minimal number of packets that must be sent while in CR state before
+ *  being able to switch to the FO state */
+#define MAX_CR_COUNT  MAX_IR_COUNT
+
 /** The minimal number of packets that must be sent while in FO state before
  *  being able to switch to the SO state */
 #define MAX_FO_COUNT  3U
