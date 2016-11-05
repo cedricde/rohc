@@ -2457,6 +2457,9 @@ static struct rohc_comp_ctxt *
 	/* get the context using help from the profile we just found */
 	for(i = 0; i <= comp->medium.max_cid; i++)
 	{
+		bool is_feedback_channel_available;
+		bool is_static_part_transmitted;
+		bool is_ctxt_established;
 		size_t cr_score = 0;
 
 		context = &comp->contexts[i];
@@ -2486,10 +2489,17 @@ static struct rohc_comp_ctxt *
 		                context->cid, cr_score);
 
 		/* several contexts may be used as basis for context replication:
-		 *  - drop the ones that are not fully established with decompressor,
+		 *  - drop the ones that are not fully established with decompressor (fully
+		 *    established means that the static part of the context was explicitely
+		 *    acknowledged by the decompressor through one ACK protected by a CRC),
 		 *  - keep the one that is the nearest from the new stream (more bytes
 		 *    in common) */
-		if(context->state > ROHC_COMP_STATE_IR && cr_score > best_cr_score)
+		is_feedback_channel_available = !!(context->mode > ROHC_U_MODE);
+		is_static_part_transmitted = !!(context->state == ROHC_COMP_STATE_FO ||
+		                                context->state == ROHC_COMP_STATE_SO);
+		is_ctxt_established =
+			(is_feedback_channel_available && is_static_part_transmitted);
+		if(is_ctxt_established && cr_score > best_cr_score)
 		{
 			do_ctxt_replication = true;
 			best_ctxt_for_replication = context->cid;
