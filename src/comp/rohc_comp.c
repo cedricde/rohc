@@ -2162,6 +2162,8 @@ const char * rohc_comp_get_state_descr(const rohc_comp_state_t state)
 			return "FO";
 		case ROHC_COMP_STATE_SO:
 			return "SO";
+		case ROHC_COMP_STATE_CR:
+			return "CR";
 		case ROHC_COMP_STATE_UNKNOWN:
 		default:
 			return "no description";
@@ -2358,6 +2360,9 @@ static struct rohc_comp_ctxt *
 	c->cid = cid_to_use;
 	c->profile = profile;
 
+	c->mode = ROHC_U_MODE;
+	c->state = ROHC_COMP_STATE_IR;
+
 	/* context replication */
 	if(do_ctxt_replication && cid_to_use != cid_for_replication)
 	{
@@ -2366,14 +2371,13 @@ static struct rohc_comp_ctxt *
 		           "with CID %zu", cid_to_use, cid_for_replication);
 		c->do_ctxt_replication = true;
 		c->cr_base_cid = cid_for_replication;
+		/* use Context Replication (CR) compressor state instead of IR */
+		c->state = ROHC_COMP_STATE_CR;
 	}
 	else
 	{
 		c->do_ctxt_replication = false;
 	}
-
-	c->mode = ROHC_U_MODE;
-	c->state = ROHC_COMP_STATE_IR;
 
 	c->compressor = comp;
 

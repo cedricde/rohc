@@ -354,6 +354,8 @@ struct rohc_comp_ctxt
 	size_t fo_count;
 	/** The number of packets sent while in Second Order (SO) state */
 	size_t so_count;
+	/** The number of packets sent while in Context Replication (CR) state */
+	size_t cr_count;
 
 	/**
 	 * @brief The number of packet sent while in SO state, used for the periodic
