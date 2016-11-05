@@ -2303,7 +2303,6 @@ static struct rohc_comp_ctxt *
 		rohc_debug(comp, ROHC_TRACE_COMP, ROHC_PROFILE_GENERAL,
 		           "recycle oldest context (CID = %zu)", cid_to_use);
 		comp->contexts[cid_to_use].profile->destroy(&comp->contexts[cid_to_use]);
-		comp->contexts[cid_to_use].key = 0; /* reset context key */
 		comp->contexts[cid_to_use].used = 0;
 		assert(comp->num_contexts_used > 0);
 		comp->num_contexts_used--;
@@ -2352,7 +2351,6 @@ static struct rohc_comp_ctxt *
 
 	c->cid = cid_to_use;
 	c->profile = profile;
-	c->key = packet->key;
 
 	c->mode = ROHC_U_MODE;
 	c->state = ROHC_COMP_STATE_IR;
@@ -2436,12 +2434,6 @@ static struct rohc_comp_ctxt *
 
 		/* don't look at contexts with the wrong profile */
 		if(context->profile->id != profile->id)
-		{
-			continue;
-		}
-
-		/* don't look at contexts with the wrong key */
-		if(packet->key != context->key)
 		{
 			continue;
 		}
