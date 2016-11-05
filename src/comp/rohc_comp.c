@@ -2485,9 +2485,11 @@ static struct rohc_comp_ctxt *
 		rohc_comp_debug(context, "context CID %zu scores %zu for Context Replication",
 		                context->cid, cr_score);
 
-		/* several contexts may be used as basis for context replication,
-		 * keep the one that is the nearest from the new stream */
-		if(cr_score > best_cr_score)
+		/* several contexts may be used as basis for context replication:
+		 *  - drop the ones that are not fully established with decompressor,
+		 *  - keep the one that is the nearest from the new stream (more bytes
+		 *    in common) */
+		if(context->state > ROHC_COMP_STATE_IR && cr_score > best_cr_score)
 		{
 			do_ctxt_replication = true;
 			best_ctxt_for_replication = context->cid;
