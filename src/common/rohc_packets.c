@@ -310,7 +310,7 @@ rohc_packet_t rohc_get_packet_type(const char *const packet_id)
  */
 bool rohc_packet_carry_static_info(const rohc_packet_t packet_type)
 {
-	return (packet_type == ROHC_PACKET_IR);
+	return (packet_type == ROHC_PACKET_IR || packet_type == ROHC_PACKET_IR_CR);
 }
 
 
@@ -328,6 +328,7 @@ bool rohc_packet_carry_crc_7_or_8(const rohc_packet_t packet_type)
 	switch(packet_type)
 	{
 		case ROHC_PACKET_IR:
+		case ROHC_PACKET_IR_CR:
 		case ROHC_PACKET_IR_DYN:
 		case ROHC_PACKET_UOR_2:
 		case ROHC_PACKET_UOR_2_RTP:
