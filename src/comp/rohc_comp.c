@@ -2614,7 +2614,9 @@ void rohc_comp_change_mode(struct rohc_comp_ctxt *const context,
 		          "CID %zu: change from mode %d to mode %d",
 		          context->cid, context->mode, new_mode);
 		context->mode = new_mode;
+#if 0 /* TODO */
 		rohc_comp_change_state(context, ROHC_COMP_STATE_IR);
+#endif
 	}
 }
 
