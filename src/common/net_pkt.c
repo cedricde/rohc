@@ -47,6 +47,7 @@ bool net_pkt_parse(struct net_pkt *const packet,
                    void *const trace_cb_priv,
                    rohc_trace_entity_t trace_entity)
 {
+	packet->time = data.time;
 	packet->data = rohc_buf_data(data);
 	packet->len = data.len;
 	packet->ip_hdr_nr = 0;
