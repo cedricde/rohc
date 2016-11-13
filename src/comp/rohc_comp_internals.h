@@ -367,12 +367,14 @@ struct rohc_comp_ctxt
 	 * @see rohc_comp_periodic_down_transition
 	 */
 	size_t go_back_fo_count;
+	struct rohc_ts go_back_fo_time; /**< TODO */
 	/**
 	 * @brief The number of packet sent while in FO or SO state, used for the
 	 *        periodic refreshes of the context
 	 * @see rohc_comp_periodic_down_transition
 	 */
 	size_t go_back_ir_count;
+	struct rohc_ts go_back_ir_time; /**< TODO */
 
 	/** The average size of the uncompressed packets */
 	int total_uncompressed_size;
@@ -405,7 +407,8 @@ void rohc_comp_change_state(struct rohc_comp_ctxt *const context,
                             const rohc_comp_state_t new_state)
 	__attribute__((nonnull(1)));
 
-void rohc_comp_periodic_down_transition(struct rohc_comp_ctxt *const context)
+void rohc_comp_periodic_down_transition(struct rohc_comp_ctxt *const context,
+                                        const struct rohc_ts pkt_time)
 	__attribute__((nonnull(1)));
 
 bool rohc_comp_reinit_context(struct rohc_comp_ctxt *const context)
