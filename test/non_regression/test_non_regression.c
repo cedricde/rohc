@@ -231,6 +231,8 @@ static enum
 /** The number of warnings emitted by the ROHC library */
 static size_t nr_rohc_warnings = 0;
 
+static size_t nr_pkts_per_size[MAX_ROHC_SIZE + 1] = { 0 };
+
 
 /**
  * @brief Main function for the ROHC test program
@@ -476,6 +478,20 @@ int main(int argc, char *argv[])
 	if(assert_on_error)
 	{
 		assert(status == 0 || status == 77);
+	}
+
+	{
+		size_t i;
+		for(i = 0; i <= 1600; i++)
+		{
+			size_t j;
+			printf("%zu ", i);
+			for(j = 0; j < nr_pkts_per_size[i] / 100; j++)
+			{
+				printf("*");
+			}
+			printf(" %zu\n", nr_pkts_per_size[i]);
+		}
 	}
 
 error:
@@ -969,7 +985,6 @@ static int compress_decompress(struct rohc_comp *comp,
 	}
 
 	/* output the size of the ROHC packet to the output file if asked */
-	if(size_output_file != NULL)
 	{
 		rohc_comp_last_packet_info2_t last_packet_info;
 
@@ -982,10 +997,14 @@ static int compress_decompress(struct rohc_comp *comp,
 			status = -1;
 			goto exit;
 		}
+		nr_pkts_per_size[last_packet_info.header_last_comp_size]++;
 
-		fprintf(size_output_file, "compressor_num = %d\tpacket_num = %d\t"
-		        "rohc_size = %zu\tpacket_type = %d\n", num_comp, num_packet,
-		        rohc_packet.len, last_packet_info.packet_type);
+		if(size_output_file != NULL)
+		{
+			fprintf(size_output_file, "compressor_num = %d\tpacket_num = %d\t"
+			        "rohc_size = %zu\tpacket_type = %d\n", num_comp, num_packet,
+			        rohc_packet.len, last_packet_info.packet_type);
+		}
 	}
 
 	/* compare the ROHC packets with the ones given by the user if asked */
