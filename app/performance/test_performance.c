@@ -476,11 +476,13 @@ static int test_compression_perfs(const bool is_verbose,
 	while((packet = (unsigned char *) pcap_next(handle, &header)) != NULL)
 	{
 		(*packet_count)++;
+#if 0
 		if((*packet_count) != 0 && ((*packet_count) % 100000) == 0)
 		{
 			fprintf(stderr, "compression: packet #%lu\r", *packet_count);
 			fflush(stderr);
 		}
+#endif
 
 		/* compress the IP packet */
 		ret = time_compress_packet(comp, *packet_count,
