@@ -349,12 +349,15 @@ static int generate_comp_stats_all(const rohc_cid_type_t cid_type,
 		goto close_input;
 	}
 
-	/* set the callback for traces on compressor */
-	if(!rohc_comp_set_traces_cb2(comp, print_rohc_traces, NULL))
+	/* set the callback for traces on compressor only in verbose mode */
+	if(is_verbose)
 	{
-		fprintf(stderr, "failed to set the callback for traces on "
-		        "compressor\n");
-		goto destroy_comp;
+		if(!rohc_comp_set_traces_cb2(comp, print_rohc_traces, NULL))
+		{
+			fprintf(stderr, "failed to set the callback for traces on "
+			        "compressor\n");
+			goto destroy_comp;
+		}
 	}
 
 	/* enable profiles */
@@ -542,13 +545,10 @@ static void print_rohc_traces(void *const priv_ctxt __attribute__((unused)),
                               const char *const format,
                               ...)
 {
-	if(is_verbose)
-	{
-		va_list args;
-		va_start(args, format);
-		vfprintf(stderr, format, args);
-		va_end(args);
-	}
+	va_list args;
+	va_start(args, format);
+	vfprintf(stderr, format, args);
+	va_end(args);
 }
 
 
