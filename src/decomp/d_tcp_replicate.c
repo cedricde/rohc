@@ -530,7 +530,7 @@ static int tcp_parse_replicate_tcp(const struct rohc_decomp_ctxt *const context,
 	{
 		const uint16_t *const tcp_replicate_src_port = (uint16_t *) remain_data;
 
-		if(remain_len < sizeof(tcp_replicate_t))
+		if(remain_len < sizeof(uint16_t))
 		{
 			rohc_decomp_warn(context, "malformed TCP replicate part: only %zu bytes "
 			                 "available while at least %zu bytes required for the "
@@ -562,7 +562,7 @@ static int tcp_parse_replicate_tcp(const struct rohc_decomp_ctxt *const context,
 	{
 		const uint16_t *const tcp_replicate_dst_port = (uint16_t *) remain_data;
 
-		if(remain_len < sizeof(tcp_replicate_t))
+		if(remain_len < sizeof(uint16_t))
 		{
 			rohc_decomp_warn(context, "malformed TCP replicate part: only %zu bytes "
 			                 "available while at least %zu bytes required for the "
