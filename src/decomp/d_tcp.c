@@ -2821,14 +2821,12 @@ static void d_tcp_reset_extr_bits(const struct rohc_decomp_ctxt *const context,
 	bits->tcp_opts.nr = 0;
 	for(i = 0; i < ROHC_TCP_OPTS_MAX; i++)
 	{
-		size_t j;
-
 		bits->tcp_opts.expected_dynamic[i] = false;
 		bits->tcp_opts.found[i] = false;
-		for(j = 0; j <= MAX_TCP_OPTION_INDEX; j++)
-		{
-			bits->tcp_opts.bits[j].used = false;
-		}
+	}
+	for(i = 0; i <= MAX_TCP_OPTION_INDEX; i++)
+	{
+		bits->tcp_opts.bits[i].used = false;
 	}
 #endif
 
