@@ -484,6 +484,11 @@ static bool c_tcp_create_from_ctxt(struct rohc_comp_ctxt *const ctxt,
 	ctxt->specific = tcp_ctxt;
 	memcpy(ctxt->specific, base_ctxt->specific, sizeof(struct sc_tcp_context));
 
+	/* keep the counter of compressed packets from the base context,
+	 * since it is used to init some compression algorithms and we
+	 * don't want the initialization to restart */
+	ctxt->num_sent_packets = base_ctxt->num_sent_packets;
+
 	/* MSN */
 	tcp_ctxt->msn_wlsb =
 		c_create_wlsb(16, comp->wlsb_window_width, ROHC_LSB_SHIFT_TCP_SN);
