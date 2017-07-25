@@ -43,6 +43,7 @@
  */
 struct c_window
 {
+	bool used;
 	uint32_t sn;     /**< The Sequence Number (SN) associated with the entry
 	                      (used to acknowledge the entry) */
 	uint32_t value;  /**< The value stored in the window entry */
@@ -56,9 +57,6 @@ struct c_wlsb
 {
 	/// The width of the window
 	size_t window_width; /* TODO: R-mode needs a non-fixed window width */
-
-	/// The size of the window (power of 2) minus 1
-	size_t window_mask;
 
 	/// A pointer on the oldest entry in the window (change on acknowledgement)
 	size_t oldest;
@@ -74,7 +72,7 @@ struct c_wlsb
 	rohc_lsb_shift_t p;
 
 	/** The window in which previous values of the encoded value are stored */
-	struct c_window window[1];
+	struct c_window window[16];
 };
 
 
@@ -124,7 +122,6 @@ struct c_wlsb * c_create_wlsb(const size_t bits,
 	wlsb->next = 0;
 	wlsb->count = 0;
 	wlsb->window_width = window_width;
-	wlsb->window_mask = window_width - 1;
 	wlsb->bits = bits;
 	wlsb->p = p;
 
@@ -166,16 +163,17 @@ void c_add_wlsb(struct c_wlsb *const wlsb,
 	/* if window is full, an entry is overwritten */
 	if(wlsb->count == wlsb->window_width)
 	{
-		wlsb->oldest = (wlsb->oldest + 1) & wlsb->window_mask;
+		wlsb->oldest = (wlsb->oldest + 1) % wlsb->window_width;
 	}
 	else
 	{
 		wlsb->count++;
 	}
 
+	wlsb->window[wlsb->next].used = true;
 	wlsb->window[wlsb->next].sn = sn;
 	wlsb->window[wlsb->next].value = value;
-	wlsb->next = (wlsb->next + 1) & wlsb->window_mask;
+	wlsb->next = (wlsb->next + 1) % wlsb->window_width;
 }
 
 
@@ -233,7 +231,7 @@ size_t wlsb_get_kp_8bits(const struct c_wlsb *const wlsb,
 			 * to recreate it thanks to ANY value in the window */
 			for(i = wlsb->count, entry = wlsb->oldest;
 			    i > 0;
-			    i--, entry = (entry + 1) & wlsb->window_mask)
+			    i--, entry = (entry + 1) % wlsb->window_width)
 			{
 				const uint8_t v_ref = wlsb->window[entry].value;
 
@@ -381,7 +379,7 @@ size_t wlsb_get_minkp_16bits(const struct c_wlsb *const wlsb,
 			 * to recreate it thanks to ANY value in the window */
 			for(i = wlsb->count, entry = wlsb->oldest;
 			    i > 0;
-			    i--, entry = (entry + 1) & wlsb->window_mask)
+			    i--, entry = (entry + 1) % wlsb->window_width)
 			{
 				const uint16_t v_ref = wlsb->window[entry].value;
 
@@ -532,9 +530,10 @@ size_t wlsb_get_minkp_32bits(const struct c_wlsb *const wlsb,
 
 			/* find the minimal number of bits of the value required to be able
 			 * to recreate it thanks to ANY value in the window */
+//			for(i = 0; i < wlsb->window_width; i++)
 			for(i = wlsb->count, entry = wlsb->oldest;
 			    i > 0;
-			    i--, entry = (entry + 1) & wlsb->window_mask)
+			    i--, entry = (entry + 1) % wlsb->window_width)
 			{
 				const uint32_t v_ref = wlsb->window[entry].value;
 
@@ -617,7 +616,7 @@ size_t wlsb_ack(struct c_wlsb *const wlsb,
 	 * starting from the one */
 	for(i = 0; i < wlsb->count; i++)
 	{
-		entry = wlsb_get_next_older(entry, wlsb->window_mask);
+		entry = wlsb_get_next_older(entry, wlsb->window_width - 1);
 		if((wlsb->window[entry].sn & sn_mask) == sn_bits)
 		{
 			/* remove the window entry and all the older ones if found */
@@ -639,7 +638,7 @@ bool wlsb_is_sn_present(struct c_wlsb *const wlsb, const uint32_t sn)
 	 * starting from the one */
 	for(i = 0; i < wlsb->count; i++)
 	{
-		entry = wlsb_get_next_older(entry, wlsb->window_mask);
+		entry = wlsb_get_next_older(entry, wlsb->window_width - 1);
 		if(sn == wlsb->window[entry].sn)
 		{
 			return true;
@@ -686,7 +685,8 @@ static size_t wlsb_ack_remove(struct c_wlsb *const wlsb, const size_t pos)
 	while(wlsb->oldest != pos)
 	{
 		/* remove the oldest entry */
-		wlsb->oldest = (wlsb->oldest + 1) & wlsb->window_mask;
+		wlsb->window[wlsb->oldest].used = false;
+		wlsb->oldest = (wlsb->oldest + 1) % wlsb->window_width;
 		wlsb->count--;
 		acked_nr++;
 	}
