@@ -82,7 +82,7 @@ $( dirname $0 )/configure \
 	--enable-app-sniffer \
 	--disable-app-stats \
 	--enable-rohc-tests \
-	--enable-doc \
+	--disable-doc \
 	--enable-examples \
 	--disable-linux-kernel-module \
 	${add_opts} \
