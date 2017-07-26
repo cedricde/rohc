@@ -84,7 +84,7 @@ $( dirname $0 )/configure \
 	--enable-rohc-tests \
 	--enable-doc \
 	--enable-examples \
-	--enable-linux-kernel-module \
+	--disable-linux-kernel-module \
 	${add_opts} \
 	$@
 
