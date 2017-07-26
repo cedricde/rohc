@@ -80,7 +80,7 @@ $( dirname $0 )/configure \
 	--enable-fortify-sources \
 	--enable-app-performance \
 	--enable-app-sniffer \
-	--enable-app-stats \
+	--disable-app-stats \
 	--enable-rohc-tests \
 	--enable-doc \
 	--enable-examples \
