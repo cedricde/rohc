@@ -241,8 +241,6 @@ struct sc_tcp_context
 	/** The number of times the ECN fields were not needed */
 	size_t ecn_used_zero_count;
 
-	uint32_t tcp_last_seq_num;
-
 	uint16_t msn;               /**< The Master Sequence Number (MSN) */
 	struct c_wlsb *msn_wlsb;    /**< The W-LSB decoding context for MSN */
 

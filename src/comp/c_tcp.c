@@ -763,7 +763,6 @@ static bool c_tcp_create_from_pkt(struct rohc_comp_ctxt *const context,
 	tcp_context->ecn_used = false;
 	tcp_context->ecn_used_change_count = MAX_FO_COUNT;
 	tcp_context->ecn_used_zero_count = 0;
-	tcp_context->tcp_last_seq_num = -1;
 
 	/* TCP header begins just after the IP headers */
 	assert(remain_len >= sizeof(struct tcphdr));
