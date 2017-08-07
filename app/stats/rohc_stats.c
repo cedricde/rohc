@@ -90,8 +90,9 @@ static bool is_verbose = false;
 static void usage(void);
 static int generate_comp_stats_all(const rohc_cid_type_t cid_type,
                                    const unsigned int max_contexts,
+                                   const unsigned int l2_offset,
                                    const char *source)
-	__attribute__((warn_unused_result, nonnull(3)));
+	__attribute__((warn_unused_result, nonnull(4)));
 static int generate_comp_stats_one(struct rohc_comp *comp,
                                    const unsigned long num_packet,
                                    const struct pcap_pkthdr header,
@@ -133,6 +134,7 @@ int main(int argc, char *argv[])
 	int max_contexts = ROHC_SMALL_CID_MAX + 1;
 	size_t max_possible_contexts = ROHC_SMALL_CID_MAX + 1;
 	rohc_cid_type_t cid_type = ROHC_SMALL_CID;
+	int l2_offset = ETHER_HDR_LEN;
 	int args_used;
 
 	/* parse program arguments, print the help message in case of failure */
@@ -173,6 +175,18 @@ int main(int argc, char *argv[])
 				goto error;
 			}
 			max_contexts = atoi(argv[1]);
+			args_used++;
+		}
+		else if(!strcmp(*argv, "--l2-offset"))
+		{
+			/* get the layer 2 offset the test should use */
+			if(argc <= 1)
+			{
+				fprintf(stderr, "missing mandatory --l2-offset parameter\n");
+				usage();
+				goto error;
+			}
+			l2_offset = atoi(argv[1]);
 			args_used++;
 		}
 		else if(cid_type_name == NULL)
@@ -230,6 +244,13 @@ int main(int argc, char *argv[])
 		goto error;
 	}
 
+	if(l2_offset < 0 || l2_offset > DEV_MTU)
+	{
+		fprintf(stderr, "the L2 offset should be between 0 and %u\n", DEV_MTU);
+		usage();
+		goto error;
+	}
+
 	/* the source is mandatory */
 	if(source_descr == NULL)
 	{
@@ -239,7 +260,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* generate ROHC compression statistics with the packets from the source */
-	status = generate_comp_stats_all(cid_type, max_contexts, source_descr);
+	status = generate_comp_stats_all(cid_type, max_contexts, l2_offset, source_descr);
 
 error:
 	return status;
@@ -279,6 +300,8 @@ static void usage(void)
 	       "      --verbose           Be more verbose\n"
 	       "      --max-contexts NUM  The maximum number of ROHC contexts to\n"
 	       "                          simultaneously use during the test\n"
+	       "      --l2-offset NUM     The number of bytes to skip for every packet\n"
+	       "                          (%u bytes by default)\n"
 	       "\n"
 	       "With:\n"
 	       "  CID_TYPE  The type of CID to use among 'smallcid'\n"
@@ -292,7 +315,7 @@ static void usage(void)
 	       "  rohc_stats largecid ~/lan.pcap      Generate statistics from a file\n"
 	       "  rohc_stats largecid eth0            Generate statistics from Ethernet device 'eth0'\n"
 	       "\n"
-	       "Report bugs to <" PACKAGE_BUGREPORT ">.\n");
+	       "Report bugs to <" PACKAGE_BUGREPORT ">.\n", ETHER_HDR_LEN);
 }
 
 
@@ -301,12 +324,14 @@ static void usage(void)
  *
  * @param cid_type       The type of CIDs the compressor shall use
  * @param max_contexts   The maximum number of ROHC contexts to use
+ * @param l2_offset      The number of bytes to skip for L2 header
  * @param source         The source of IP packets
  * @return               0 in case of success,
  *                       1 in case of failure
  */
 static int generate_comp_stats_all(const rohc_cid_type_t cid_type,
                                    const unsigned int max_contexts,
+                                   const unsigned int l2_offset,
                                    const char *source)
 {
 	struct stat source_stat;
@@ -370,7 +395,7 @@ static int generate_comp_stats_all(const rohc_cid_type_t cid_type,
 	/* determine the size of the link layer header */
 	if(link_layer_type == DLT_EN10MB)
 	{
-		link_len = ETHER_HDR_LEN;
+		link_len = l2_offset;
 	}
 	else if(link_layer_type == DLT_LINUX_SLL)
 	{
