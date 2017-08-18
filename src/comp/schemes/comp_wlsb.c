@@ -32,6 +32,7 @@
 #  include <string.h>
 #endif
 #include <assert.h>
+#include <stdio.h>
 
 
 /*
@@ -72,7 +73,7 @@ struct c_wlsb
 	rohc_lsb_shift_t p;
 
 	/** The window in which previous values of the encoded value are stored */
-	struct c_window window[16];
+	struct c_window window[64];
 };
 
 
@@ -106,13 +107,13 @@ struct c_wlsb * c_create_wlsb(const size_t bits,
                               const rohc_lsb_shift_t p)
 {
 	struct c_wlsb *wlsb;
+	size_t i;
 
 	assert(bits > 0);
 	assert(window_width > 0);
-	/* window_width must be a power of 2! */
-	assert(window_width != 0 && (window_width & (window_width - 1)) == 0);
+	assert(window_width <= 64);
 
-	wlsb = malloc(sizeof(struct c_wlsb) + (window_width - 1) * sizeof(struct c_window));
+	wlsb = malloc(sizeof(struct c_wlsb));
 	if(wlsb == NULL)
 	{
 		goto error;
@@ -124,6 +125,11 @@ struct c_wlsb * c_create_wlsb(const size_t bits,
 	wlsb->window_width = window_width;
 	wlsb->bits = bits;
 	wlsb->p = p;
+
+	for(i = 0; i < wlsb->window_width; i++)
+	{
+		wlsb->window[i].used = false;
+	}
 
 	return wlsb;
 
@@ -518,11 +524,10 @@ size_t wlsb_get_minkp_32bits(const struct c_wlsb *const wlsb,
 
 		bits_nr = min_k;
 
-		for(k = bits_nr; k < wlsb->bits; k++)
+		for(k = bits_nr; k < 32; k++)
 		{
 			const uint32_t interval_width = (1U << k) - 1; /* interval width = 2^k - 1 */
 			int32_t computed_p;
-			size_t entry;
 			size_t i;
 
 			/* determine the real p value to use */
@@ -530,43 +535,48 @@ size_t wlsb_get_minkp_32bits(const struct c_wlsb *const wlsb,
 
 			/* find the minimal number of bits of the value required to be able
 			 * to recreate it thanks to ANY value in the window */
-//			for(i = 0; i < wlsb->window_width; i++)
-			for(i = wlsb->count, entry = wlsb->oldest;
-			    i > 0;
-			    i--, entry = (entry + 1) % wlsb->window_width)
+			for(i = 0; i < wlsb->window_width; i++)
 			{
-				const uint32_t v_ref = wlsb->window[entry].value;
+				const struct c_window *const entry = wlsb->window + i;
 
-				/* compute the minimal and maximal values of the interval:
-				 *   min = v_ref - p
-				 *   max = v_ref + interval_with - p
-				 *
-				 * Straddling the lower and upper wraparound boundaries
-				 * is handled without additional operation */
-				const uint32_t min = v_ref - computed_p;
-				const uint32_t max = min + interval_width;
-
-				if(min <= max)
+				if(entry->used)
 				{
-					/* interpretation interval does not straddle field boundaries,
-					 * check if value is in [min, max] */
-					if(value < min || value > max)
+					const uint32_t v_ref = entry->value;
+
+					/* compute the minimal and maximal values of the interval:
+					 *   min = v_ref - p
+					 *   max = v_ref + interval_with - p
+					 *
+					 * Straddling the lower and upper wraparound boundaries
+					 * is handled without additional operation */
+					const uint32_t min = v_ref - computed_p;
+					const uint32_t max = min + interval_width;
+
+					if(min <= max)
 					{
-						break;
+						/* interpretation interval does not straddle field boundaries,
+						 * check if value is in [min, max] */
+						if(value < min || value > max)
+						{
+//printf("p=%d | k=%zu | i=%zu : value %u is NOT in range [%u ; %u]\n", p, k, i, value, min, max);
+							break;
+						}
+//printf("p=%d | k=%zu | i=%zu : value %u is in range [%u ; %u]\n", p, k, i, value, min, max);
 					}
-				}
-				else
-				{
-					/* the interpretation interval does straddle the field boundaries,
-					 * check if value is in [min, 0xffff] or [0, max] */
-					if(value < min && value > max)
+					else
 					{
-						break;
+						/* the interpretation interval does straddle the field boundaries,
+						 * check if value is in [min, 0xffff] or [0, max] */
+						if(value < min && value > max)
+						{
+//printf("p=%d | k=%zu | i=%zu : value %u is NOT in range [0 ; %u] or [%u ; 0xffffffff]\n", p, k, i, value, max, min);
+							break;
+						}
+//printf("p=%d | k=%zu | i=%zu : value %u is in range [0 ; %u] or [%u ; 0xffffffff]\n", p, k, i, value, max, min);
 					}
 				}
 			}
-
-			if(i == 0)
+			if(i == wlsb->window_width)
 			{
 				break;
 			}
