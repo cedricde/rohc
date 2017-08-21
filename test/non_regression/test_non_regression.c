@@ -839,7 +839,6 @@ static int compress_decompress(struct rohc_comp *comp,
 {
 	/* the layer 2 header */
 	size_t l2_hdr_max_len = max(ETHER_HDR_LEN, LINUX_COOKED_HDR_LEN);
-	struct ether_header *eth_header;
 
 	/* the buffer that will contain the initial uncompressed packet */
 	const struct rohc_ts arrival_time = {
@@ -882,6 +881,17 @@ static int compress_decompress(struct rohc_comp *comp,
 	}
 
 	/* copy the layer 2 header before the ROHC packet, then skip it */
+	if(link_len_src == ETHER_HDR_LEN)
+	{
+		struct ether_header *const eth_header =
+			(struct ether_header *) rohc_buf_data(ip_packet);
+		const uint16_t proto_type = ntohs(eth_header->ether_type);
+
+		if(proto_type == 0x8100)
+		{
+			link_len_src += 4;
+		}
+	}
 	rohc_buf_append(&rohc_packet, packet, link_len_src);
 	rohc_buf_pull(&ip_packet, link_len_src);
 	rohc_buf_pull(&rohc_packet, link_len_src);
@@ -976,7 +986,8 @@ static int compress_decompress(struct rohc_comp *comp,
 			rohc_buf_prepend(&rohc_packet, packet, link_len_src);
 			if(link_len_src == ETHER_HDR_LEN) /* Ethernet only */
 			{
-				eth_header = (struct ether_header *) rohc_buf_data(rohc_packet);
+				struct ether_header *const eth_header =
+					(struct ether_header *) rohc_buf_data(rohc_packet);
 				eth_header->ether_type = htons(ROHC_ETHERTYPE); /* ROHC Ethertype */
 			}
 			else if(link_len_src == LINUX_COOKED_HDR_LEN) /* Linux Cooked Sockets only */
